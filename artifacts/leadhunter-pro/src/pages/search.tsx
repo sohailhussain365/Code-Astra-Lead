@@ -167,7 +167,9 @@ function isChain(name: string): boolean {
 
 // ─── FILTER STATE ─────────────────────────────────────────────────────────────
 interface Filters {
-  location: string;
+  city: string;
+  state: string;
+  zipCode: string;
   radius: string;
   type: string;
   keyword: string;
@@ -186,7 +188,9 @@ interface Filters {
 }
 
 const DEFAULT_FILTERS: Filters = {
-  location: "",
+  city: "",
+  state: "",
+  zipCode: "",
   radius: "5000",
   type: "restaurant",
   keyword: "",
@@ -431,8 +435,9 @@ export default function SearchPage() {
       toast({ title: "Google API key required", variant: "destructive" });
       return;
     }
-    if (!filters.location.trim()) {
-      toast({ title: "Enter a city or ZIP code", variant: "destructive" });
+    const locationStr = [filters.city, filters.state, filters.zipCode].filter(Boolean).join(", ");
+    if (!locationStr.trim()) {
+      toast({ title: "Enter a city, state, or ZIP code", variant: "destructive" });
       return;
     }
 
@@ -451,8 +456,8 @@ export default function SearchPage() {
     const combinedKeyword = [typeKeyword, filters.keyword].filter(Boolean).join(" ");
 
     try {
-      addLog(`Geocoding: ${filters.location}`);
-      const geoUrl = `/api/maps-proxy?path=/maps/api/geocode/json&address=${encodeURIComponent(filters.location)}&key=${apiKey}`;
+      addLog(`Geocoding: ${locationStr}`);
+      const geoUrl = `/api/maps-proxy?path=/maps/api/geocode/json&address=${encodeURIComponent(locationStr)}&key=${apiKey}`;
       const geoData = await fetchWithRetry(geoUrl);
 
       if (geoData.status === "REQUEST_DENIED") {
@@ -462,7 +467,7 @@ export default function SearchPage() {
         return;
       }
       if (!geoData.results?.length) {
-        addLog(`Error: Location not found: "${filters.location}"`);
+        addLog(`Error: Location not found: "${locationStr}"`);
         toast({ title: "Location not found", variant: "destructive" });
         setLoading(false);
         return;
@@ -560,7 +565,7 @@ export default function SearchPage() {
       const search = await createSearch.mutateAsync({
         data: {
           keyword: [filters.type, filters.keyword].filter(Boolean).join(" / "),
-          location: filters.location.trim(),
+          location: locationStr,
           radius: Math.round(Number(filters.radius) / 1000),
           leadCount: toSave.length,
           avgScore,
@@ -658,15 +663,39 @@ export default function SearchPage() {
               {/* ── Location ── */}
               <FilterSection title="📍 Location" defaultOpen={true}>
                 <div className="space-y-1">
-                  <Label className="text-xs">City or ZIP code</Label>
+                  <Label className="text-xs">City</Label>
                   <Input
-                    placeholder="e.g. Austin TX or 78701"
-                    value={filters.location}
-                    onChange={(e) => sf("location", e.target.value)}
+                    placeholder="e.g. Austin"
+                    value={filters.city}
+                    onChange={(e) => sf("city", e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                     className="h-8 text-xs bg-muted/30"
-                    data-testid="input-location"
+                    data-testid="input-city"
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">State</Label>
+                    <Input
+                      placeholder="e.g. TX"
+                      value={filters.state}
+                      onChange={(e) => sf("state", e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                      className="h-8 text-xs bg-muted/30"
+                      data-testid="input-state"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">ZIP Code</Label>
+                    <Input
+                      placeholder="e.g. 78701"
+                      value={filters.zipCode}
+                      onChange={(e) => sf("zipCode", e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                      className="h-8 text-xs bg-muted/30"
+                      data-testid="input-zip"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Search Radius</Label>
