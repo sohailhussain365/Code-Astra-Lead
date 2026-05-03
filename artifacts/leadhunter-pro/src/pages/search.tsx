@@ -410,6 +410,7 @@ export default function SearchPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [log, setLog] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [lastSearchLocation, setLastSearchLocation] = useState<string>("");
 
   const cancelledRef = useRef(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -446,6 +447,7 @@ export default function SearchPage() {
     setRawResults([]);
     setSelected(new Set());
     setLog([]);
+    setLastSearchLocation(locationStr);
 
     const max = Number(filters.maxResults);
 
@@ -565,7 +567,7 @@ export default function SearchPage() {
       const search = await createSearch.mutateAsync({
         data: {
           keyword: [filters.type, filters.keyword].filter(Boolean).join(" / "),
-          location: locationStr,
+          location: lastSearchLocation,
           radius: Math.round(Number(filters.radius) / 1000),
           leadCount: toSave.length,
           avgScore,

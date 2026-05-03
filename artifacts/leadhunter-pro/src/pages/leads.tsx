@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Layout } from "@/components/layout";
 import { LeadScoreBadge } from "@/components/lead-score-badge";
 import { LeadDetailSheet } from "@/components/lead-detail-sheet";
 import {
   useGetLeads,
   useDeleteLead,
+  useUpdateLead,
   useBulkUpdateLeads,
   getGetLeadsQueryKey,
   getGetAnalyticsSummaryQueryKey,
@@ -31,10 +32,14 @@ import {
   Trash2,
   ExternalLink,
   Filter,
-  CheckSquare,
   ChevronUp,
   ChevronDown,
   Users,
+  ThumbsUp,
+  ThumbsDown,
+  PhoneMissed,
+  MapPin,
+  StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +65,147 @@ const STAGE_COLORS: Record<string, string> = {
   lost: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
+function StatusButtons({
+  lead,
+  onUpdate,
+}: {
+  lead: any;
+  onUpdate: (id: number, patch: { outreachStatus?: string; stage?: string }) => void;
+}) {
+  const status = lead.outreachStatus;
+
+  const toggle = (
+    e: React.MouseEvent,
+    newStatus: string,
+    patch: { outreachStatus?: string; stage?: string }
+  ) => {
+    e.stopPropagation();
+    if (status === newStatus) {
+      onUpdate(lead.id, { outreachStatus: "" });
+    } else {
+      onUpdate(lead.id, patch);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        title="Interested"
+        onClick={(e) =>
+          toggle(e, "interested", { outreachStatus: "interested", stage: "interested" })
+        }
+        className={cn(
+          "flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border transition-all",
+          status === "interested"
+            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+            : "bg-transparent text-muted-foreground border-border hover:border-emerald-500/40 hover:text-emerald-400"
+        )}
+      >
+        <ThumbsUp className="h-3 w-3" />
+      </button>
+      <button
+        title="Not Interested"
+        onClick={(e) =>
+          toggle(e, "not_interested", { outreachStatus: "not_interested", stage: "lost" })
+        }
+        className={cn(
+          "flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border transition-all",
+          status === "not_interested"
+            ? "bg-red-500/20 text-red-400 border-red-500/40"
+            : "bg-transparent text-muted-foreground border-border hover:border-red-500/40 hover:text-red-400"
+        )}
+      >
+        <ThumbsDown className="h-3 w-3" />
+      </button>
+      <button
+        title="Missed Call"
+        onClick={(e) =>
+          toggle(e, "call_missed", { outreachStatus: "call_missed", stage: "contacted" })
+        }
+        className={cn(
+          "flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border transition-all",
+          status === "call_missed"
+            ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+            : "bg-transparent text-muted-foreground border-border hover:border-amber-500/40 hover:text-amber-400"
+        )}
+      >
+        <PhoneMissed className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+function InlineNote({
+  lead,
+  onUpdate,
+}: {
+  lead: any;
+  onUpdate: (id: number, patch: { notes: string }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(lead.notes ?? "");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleBlur = () => {
+    setEditing(false);
+    if (value !== (lead.notes ?? "")) {
+      onUpdate(lead.id, { notes: value });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setValue(lead.notes ?? "");
+      setEditing(false);
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleBlur();
+    }
+  };
+
+  if (editing) {
+    return (
+      <textarea
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        onClick={(e) => e.stopPropagation()}
+        rows={2}
+        className="w-full text-xs bg-muted border border-primary/40 rounded px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-primary min-w-[160px]"
+        placeholder="Add a note…"
+      />
+    );
+  }
+
+  return (
+    <div
+      onClick={handleClick}
+      className="flex items-start gap-1 cursor-pointer group min-w-[120px] max-w-[200px]"
+      title="Click to edit note"
+    >
+      <StickyNote className="h-3 w-3 mt-0.5 text-muted-foreground/50 group-hover:text-primary/60 shrink-0 transition-colors" />
+      {lead.notes ? (
+        <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-foreground transition-colors">
+          {lead.notes}
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground/30 group-hover:text-muted-foreground/60 italic transition-colors">
+          Add note…
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function Leads() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -74,12 +220,20 @@ export default function Leads() {
     stageFilter !== "all" ? { stage: stageFilter } : {}
   );
   const deleteLead = useDeleteLead();
+  const updateLead = useUpdateLead();
   const bulkUpdate = useBulkUpdateLeads();
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
     qc.invalidateQueries({ queryKey: getGetAnalyticsSummaryQueryKey() });
     qc.invalidateQueries({ queryKey: getGetStageBreakdownQueryKey() });
+  };
+
+  const handleUpdate = (id: number, patch: Record<string, any>) => {
+    updateLead.mutate(
+      { id, data: patch },
+      { onSuccess: invalidate }
+    );
   };
 
   const filtered = useMemo(() => {
@@ -161,6 +315,17 @@ export default function Leads() {
     });
   };
 
+  const openInMaps = (lead: any, e: React.MouseEvent) => {
+    if (lead.googleMapsUrl) {
+      window.open(lead.googleMapsUrl, "_blank", "noreferrer");
+    } else {
+      const query = encodeURIComponent(
+        [lead.businessName, lead.address, lead.city].filter(Boolean).join(", ")
+      );
+      window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, "_blank", "noreferrer");
+    }
+  };
+
   return (
     <Layout>
       <div className="flex flex-col h-full">
@@ -189,9 +354,12 @@ export default function Leads() {
               ))}
             </SelectContent>
           </Select>
-          <span className="text-xs text-muted-foreground ml-auto">
-            {filtered.length} lead{filtered.length !== 1 ? "s" : ""}
-          </span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground ml-auto">
+            <MapPin className="h-3 w-3" />
+            <span>Click any row to open in Google Maps</span>
+            <span className="text-border">·</span>
+            <span>{filtered.length} lead{filtered.length !== 1 ? "s" : ""}</span>
+          </div>
         </div>
 
         {/* Bulk actions bar */}
@@ -246,9 +414,9 @@ export default function Leads() {
               <p className="text-xs mt-1">Run a search to find and save leads</p>
             </div>
           ) : (
-            <table className="w-full text-sm border-collapse min-w-[900px]">
+            <table className="w-full text-sm border-collapse min-w-[1100px]">
               <thead>
-                <tr className="border-b border-border text-xs text-muted-foreground">
+                <tr className="border-b border-border text-xs text-muted-foreground sticky top-0 bg-background z-10">
                   <th className="w-8 px-3 py-2.5 text-left">
                     <Checkbox
                       checked={selected.size === filtered.length && filtered.length > 0}
@@ -264,6 +432,7 @@ export default function Leads() {
                     Score <SortIcon k="leadScore" />
                   </th>
                   <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Stage</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Status</th>
                   <th
                     className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider cursor-pointer hover:text-foreground"
                     onClick={() => toggleSort("rating")}
@@ -271,8 +440,8 @@ export default function Leads() {
                     Rating <SortIcon k="rating" />
                   </th>
                   <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Location</th>
-                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Web</th>
-                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Phone</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Web / Phone</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Notes</th>
                   <th className="w-10 px-3 py-2.5" />
                 </tr>
               </thead>
@@ -281,12 +450,14 @@ export default function Leads() {
                   <tr
                     key={lead.id}
                     className={cn(
-                      "border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors",
+                      "border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors group",
                       selected.has(lead.id) && "bg-primary/5"
                     )}
-                    onClick={() => setSelectedLead(lead)}
+                    onClick={(e) => openInMaps(lead, e)}
+                    title={`Open ${lead.businessName} in Google Maps`}
                     data-testid={`row-lead-${lead.id}`}
                   >
+                    {/* Checkbox */}
                     <td
                       className="px-3 py-2.5"
                       onClick={(e) => {
@@ -296,15 +467,24 @@ export default function Leads() {
                     >
                       <Checkbox checked={selected.has(lead.id)} data-testid={`checkbox-lead-${lead.id}`} />
                     </td>
+
+                    {/* Business name */}
                     <td className="px-3 py-2.5">
-                      <div className="font-medium truncate max-w-[180px]">{lead.businessName}</div>
+                      <div className="font-medium truncate max-w-[180px] flex items-center gap-1.5">
+                        <MapPin className="h-3 w-3 text-muted-foreground/40 group-hover:text-primary/60 shrink-0 transition-colors" />
+                        {lead.businessName}
+                      </div>
                       {lead.category && (
-                        <div className="text-xs text-muted-foreground truncate">{lead.category}</div>
+                        <div className="text-xs text-muted-foreground truncate ml-4.5">{lead.category}</div>
                       )}
                     </td>
+
+                    {/* Score */}
                     <td className="px-3 py-2.5">
                       <LeadScoreBadge score={lead.leadScore} />
                     </td>
+
+                    {/* Stage */}
                     <td className="px-3 py-2.5">
                       <span
                         className={cn(
@@ -315,6 +495,13 @@ export default function Leads() {
                         {lead.stage}
                       </span>
                     </td>
+
+                    {/* Status toggles */}
+                    <td className="px-3 py-2.5">
+                      <StatusButtons lead={lead} onUpdate={handleUpdate} />
+                    </td>
+
+                    {/* Rating */}
                     <td className="px-3 py-2.5">
                       {lead.rating != null ? (
                         <span className="flex items-center gap-1 text-amber-400 text-xs">
@@ -326,36 +513,59 @@ export default function Leads() {
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[140px]">
+
+                    {/* Location */}
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[120px]">
                       {lead.city || lead.address || "—"}
                     </td>
+
+                    {/* Web / Phone */}
                     <td className="px-3 py-2.5">
-                      {lead.hasWebsite ? (
-                        lead.website ? (
-                          <a
-                            href={lead.website}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-primary hover:text-primary/80 transition-colors"
-                            data-testid={`link-website-${lead.id}`}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
+                      <div className="flex items-center gap-2">
+                        {lead.hasWebsite ? (
+                          lead.website ? (
+                            <a
+                              href={lead.website}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-primary hover:text-primary/80 transition-colors"
+                              title="Visit website"
+                              data-testid={`link-website-${lead.id}`}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          ) : (
+                            <Globe className="h-3.5 w-3.5 text-emerald-400" />
+                          )
                         ) : (
-                          <Globe className="h-3.5 w-3.5 text-emerald-400" />
-                        )
-                      ) : (
-                        <span className="text-xs text-red-400/70">None</span>
-                      )}
+                          <Globe className="h-3.5 w-3.5 text-red-400/50" title="No website" />
+                        )}
+                        {lead.hasPhone ? (
+                          lead.phone ? (
+                            <a
+                              href={`tel:${lead.phone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-emerald-400 hover:text-emerald-300 transition-colors"
+                              title={lead.phone}
+                            >
+                              <Phone className="h-3.5 w-3.5" />
+                            </a>
+                          ) : (
+                            <Phone className="h-3.5 w-3.5 text-emerald-400" />
+                          )
+                        ) : (
+                          <Phone className="h-3.5 w-3.5 text-red-400/50" title="No phone" />
+                        )}
+                      </div>
                     </td>
-                    <td className="px-3 py-2.5">
-                      {lead.hasPhone ? (
-                        <Phone className="h-3.5 w-3.5 text-emerald-400" />
-                      ) : (
-                        <span className="text-xs text-red-400/70">None</span>
-                      )}
+
+                    {/* Notes */}
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <InlineNote lead={lead} onUpdate={handleUpdate} />
                     </td>
+
+                    {/* View button */}
                     <td className="px-3 py-2.5">
                       <Button
                         size="sm"
