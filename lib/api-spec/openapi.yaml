@@ -3,20 +3,28 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: LeadHunter Pro API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: leads
+    description: Lead management
+  - name: searches
+    description: Search history
+  - name: analytics
+    description: Analytics and stats
+  - name: outreach
+    description: Outreach tools
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,291 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /leads:
+    get:
+      operationId: getLeads
+      tags: [leads]
+      summary: List all leads with optional filters
+      parameters:
+        - name: stage
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: minScore
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: searchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLeads
+      tags: [leads]
+      summary: Save a batch of leads from a search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeadsBody"
+      responses:
+        "201":
+          description: Leads saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateLeadsResponse"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get a single lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update lead status, stage, or notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLeadBody"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /leads/{id}/qualify:
+    post:
+      operationId: qualifyLead
+      tags: [leads]
+      summary: Generate AI qualification brief for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: AI qualification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualificationResult"
+        "404":
+          description: Not found
+
+  /leads/{id}/outreach-template:
+    post:
+      operationId: generateOutreachTemplate
+      tags: [outreach]
+      summary: Generate personalized outreach email or call script
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutreachTemplateBody"
+      responses:
+        "200":
+          description: Generated outreach content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutreachTemplate"
+        "404":
+          description: Not found
+
+  /leads/bulk-action:
+    post:
+      operationId: bulkUpdateLeads
+      tags: [leads]
+      summary: Bulk update stage or status on multiple leads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkActionBody"
+      responses:
+        "200":
+          description: Updated count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResponse"
+
+  /searches:
+    get:
+      operationId: getSearches
+      tags: [searches]
+      summary: Get all saved searches
+      responses:
+        "200":
+          description: List of searches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Search"
+    post:
+      operationId: createSearch
+      tags: [searches]
+      summary: Save a search session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSearchBody"
+      responses:
+        "201":
+          description: Search saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Search"
+
+  /searches/{id}:
+    delete:
+      operationId: deleteSearch
+      tags: [searches]
+      summary: Delete a search and all its leads
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: High-level pipeline and activity summary
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+
+  /analytics/stage-breakdown:
+    get:
+      operationId: getStageBreakdown
+      tags: [analytics]
+      summary: Lead count and avg score per pipeline stage
+      responses:
+        "200":
+          description: Stage breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StageBreakdown"
+
+  /analytics/followups:
+    get:
+      operationId: getFollowups
+      tags: [analytics]
+      summary: Leads scheduled for follow-up, sorted by due date
+      responses:
+        "200":
+          description: Follow-up leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+
+  /analytics/score-distribution:
+    get:
+      operationId: getScoreDistribution
+      tags: [analytics]
+      summary: Lead score distribution buckets
+      responses:
+        "200":
+          description: Score distribution
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScoreBucket"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +327,309 @@ components:
       required:
         - status
 
+    Lead:
+      type: object
+      properties:
+        id:
+          type: integer
+        searchId:
+          type: ["integer", "null"]
+        placeId:
+          type: string
+        businessName:
+          type: string
+        address:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+        reviewCount:
+          type: ["integer", "null"]
+        hasWebsite:
+          type: boolean
+        hasPhone:
+          type: boolean
+        leadScore:
+          type: integer
+        opportunityTags:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        googleMapsUrl:
+          type: ["string", "null"]
+        linkedinSearch:
+          type: ["string", "null"]
+        stage:
+          type: string
+          description: "Pipeline stage: new, contacted, interested, qualified, won, lost"
+        outreachStatus:
+          type: ["string", "null"]
+          description: "interested, not_interested, call_missed, call_later"
+        callLaterAt:
+          type: ["string", "null"]
+          format: date-time
+        notes:
+          type: ["string", "null"]
+        aiQualification:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - placeId
+        - businessName
+        - hasWebsite
+        - hasPhone
+        - leadScore
+        - stage
+        - createdAt
+        - updatedAt
+
+    UpdateLeadBody:
+      type: object
+      properties:
+        stage:
+          type: string
+        outreachStatus:
+          type: ["string", "null"]
+        callLaterAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        aiQualification:
+          type: ["string", "null"]
+
+    CreateLeadsBody:
+      type: object
+      properties:
+        searchId:
+          type: ["integer", "null"]
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadInput"
+      required:
+        - leads
+
+    LeadInput:
+      type: object
+      properties:
+        placeId:
+          type: string
+        businessName:
+          type: string
+        address:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+        reviewCount:
+          type: ["integer", "null"]
+        hasWebsite:
+          type: boolean
+        hasPhone:
+          type: boolean
+        leadScore:
+          type: integer
+        opportunityTags:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        googleMapsUrl:
+          type: ["string", "null"]
+        linkedinSearch:
+          type: ["string", "null"]
+      required:
+        - placeId
+        - businessName
+        - hasWebsite
+        - hasPhone
+        - leadScore
+
+    CreateLeadsResponse:
+      type: object
+      properties:
+        saved:
+          type: integer
+        skipped:
+          type: integer
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lead"
+      required:
+        - saved
+        - skipped
+        - leads
+
+    BulkActionBody:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+        stage:
+          type: ["string", "null"]
+        outreachStatus:
+          type: ["string", "null"]
+      required:
+        - ids
+
+    BulkActionResponse:
+      type: object
+      properties:
+        updated:
+          type: integer
+      required:
+        - updated
+
+    Search:
+      type: object
+      properties:
+        id:
+          type: integer
+        keyword:
+          type: string
+        location:
+          type: string
+        radius:
+          type: ["integer", "null"]
+        leadCount:
+          type: integer
+        avgScore:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - keyword
+        - location
+        - leadCount
+        - createdAt
+
+    CreateSearchBody:
+      type: object
+      properties:
+        keyword:
+          type: string
+        location:
+          type: string
+        radius:
+          type: ["integer", "null"]
+        leadCount:
+          type: integer
+        avgScore:
+          type: ["number", "null"]
+      required:
+        - keyword
+        - location
+        - leadCount
+
+    QualificationResult:
+      type: object
+      properties:
+        leadId:
+          type: integer
+        qualification:
+          type: string
+        score:
+          type: integer
+        signals:
+          type: array
+          items:
+            type: string
+      required:
+        - leadId
+        - qualification
+        - score
+        - signals
+
+    OutreachTemplateBody:
+      type: object
+      properties:
+        type:
+          type: string
+          description: "email or call"
+      required:
+        - type
+
+    OutreachTemplate:
+      type: object
+      properties:
+        type:
+          type: string
+        subject:
+          type: ["string", "null"]
+        body:
+          type: string
+      required:
+        - type
+        - body
+
+    AnalyticsSummary:
+      type: object
+      properties:
+        totalLeads:
+          type: integer
+        hotLeads:
+          type: integer
+        contacted:
+          type: integer
+        qualified:
+          type: integer
+        won:
+          type: integer
+        avgScore:
+          type: ["number", "null"]
+        followupsDue:
+          type: integer
+        totalSearches:
+          type: integer
+      required:
+        - totalLeads
+        - hotLeads
+        - contacted
+        - qualified
+        - won
+        - followupsDue
+        - totalSearches
+
+    StageBreakdown:
+      type: object
+      properties:
+        stage:
+          type: string
+        count:
+          type: integer
+        avgScore:
+          type: ["number", "null"]
+      required:
+        - stage
+        - count
+
+    ScoreBucket:
+      type: object
+      properties:
+        bucket:
+          type: string
+        count:
+          type: integer
+      required:
+        - bucket
+        - count
