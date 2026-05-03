@@ -7,6 +7,7 @@ import {
   useDeleteLead,
   useUpdateLead,
   useBulkUpdateLeads,
+  useFindOwner,
   getGetLeadsQueryKey,
   getGetAnalyticsSummaryQueryKey,
   getGetStageBreakdownQueryKey,
@@ -40,6 +41,10 @@ import {
   PhoneMissed,
   MapPin,
   StickyNote,
+  User,
+  Loader2,
+  UserCheck,
+  ExternalLink as ResearchIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -206,11 +211,156 @@ function InlineNote({
   );
 }
 
+function InlineTextField({
+  value: initial,
+  placeholder,
+  onSave,
+}: {
+  value: string | null | undefined;
+  placeholder: string;
+  onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(initial ?? "");
+  const ref = useRef<HTMLInputElement>(null);
+
+  const open = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditing(true);
+    setTimeout(() => ref.current?.focus(), 0);
+  };
+
+  const commit = () => {
+    setEditing(false);
+    if (val !== (initial ?? "")) onSave(val);
+  };
+
+  const keyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") commit();
+    if (e.key === "Escape") { setVal(initial ?? ""); setEditing(false); }
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={keyDown}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full text-xs bg-muted border border-primary/40 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary min-w-[110px]"
+        placeholder={placeholder}
+      />
+    );
+  }
+
+  return (
+    <div
+      onClick={open}
+      className="cursor-pointer group text-xs min-w-[90px]"
+      title="Click to edit"
+    >
+      {initial ? (
+        <span className="text-foreground/80 group-hover:text-foreground transition-colors truncate block max-w-[140px]">
+          {initial}
+        </span>
+      ) : (
+        <span className="text-muted-foreground/30 group-hover:text-muted-foreground/60 italic transition-colors">
+          {placeholder}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function FindOwnerCell({
+  lead,
+  onUpdate,
+  onInvalidate,
+}: {
+  lead: any;
+  onUpdate: (id: number, patch: Record<string, any>) => void;
+  onInvalidate: () => void;
+}) {
+  const { toast } = useToast();
+  const findOwner = useFindOwner();
+
+  const hasOwner = lead.ownerName || lead.ownerPhone;
+
+  const handleFind = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    findOwner.mutate(
+      { id: lead.id },
+      {
+        onSuccess: (data) => {
+          if (data.confidence === "found" || data.confidence === "partial") {
+            toast({
+              title: data.confidence === "found" ? "Owner found!" : "Partial owner info found",
+              description: [data.ownerName, data.ownerPhone].filter(Boolean).join(" · "),
+            });
+            onInvalidate();
+          } else if (data.confidence === "no_website") {
+            toast({
+              title: "No website on file",
+              description: "Open research links to find owner manually.",
+            });
+            window.open(data.researchLinks.google, "_blank", "noreferrer");
+          } else {
+            toast({
+              title: "Owner not found automatically",
+              description: "Opening Google research to help you find them.",
+            });
+            window.open(data.researchLinks.google, "_blank", "noreferrer");
+          }
+        },
+        onError: () => toast({ title: "Failed to find owner", variant: "destructive" }),
+      }
+    );
+  };
+
+  return (
+    <div className="space-y-1 min-w-[150px]" onClick={(e) => e.stopPropagation()}>
+      <InlineTextField
+        value={lead.ownerName}
+        placeholder="Owner name…"
+        onSave={(v) => onUpdate(lead.id, { ownerName: v })}
+      />
+      <InlineTextField
+        value={lead.ownerPhone}
+        placeholder="Owner phone…"
+        onSave={(v) => onUpdate(lead.id, { ownerPhone: v })}
+      />
+      <button
+        onClick={handleFind}
+        disabled={findOwner.isPending}
+        title={hasOwner ? "Re-scan website for owner info" : "Auto-find owner from website"}
+        className={cn(
+          "flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border transition-all",
+          hasOwner
+            ? "border-emerald-500/30 text-emerald-400/70 hover:border-emerald-500/60 hover:text-emerald-400"
+            : "border-primary/30 text-primary/70 hover:border-primary/60 hover:text-primary"
+        )}
+      >
+        {findOwner.isPending ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : hasOwner ? (
+          <UserCheck className="h-3 w-3" />
+        ) : (
+          <User className="h-3 w-3" />
+        )}
+        {findOwner.isPending ? "Searching…" : hasOwner ? "Re-scan" : "Find Owner"}
+      </button>
+    </div>
+  );
+}
+
 export default function Leads() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
+  const [hasOwnerPhoneFilter, setHasOwnerPhoneFilter] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("leadScore");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -246,8 +396,13 @@ export default function Leads() {
           l.businessName.toLowerCase().includes(q) ||
           l.city?.toLowerCase().includes(q) ||
           l.category?.toLowerCase().includes(q) ||
-          l.phone?.includes(q)
+          l.phone?.includes(q) ||
+          l.ownerName?.toLowerCase().includes(q) ||
+          l.ownerPhone?.includes(q)
       );
+    }
+    if (hasOwnerPhoneFilter) {
+      list = list.filter((l) => !!l.ownerPhone);
     }
     list = [...list].sort((a, b) => {
       const av = a[sortKey] ?? 0;
@@ -258,7 +413,7 @@ export default function Leads() {
       return sortDir === "asc" ? Number(av) - Number(bv) : Number(bv) - Number(av);
     });
     return list;
-  }, [leads, search, sortKey, sortDir]);
+  }, [leads, search, sortKey, sortDir, hasOwnerPhoneFilter]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -326,6 +481,8 @@ export default function Leads() {
     }
   };
 
+  const ownerCount = useMemo(() => (leads ?? []).filter((l) => l.ownerPhone).length, [leads]);
+
   return (
     <Layout>
       <div className="flex flex-col h-full">
@@ -334,7 +491,7 @@ export default function Leads() {
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search leads..."
+              placeholder="Search leads, owner name/phone..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8 h-8 text-sm bg-muted/30"
@@ -354,9 +511,33 @@ export default function Leads() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Has Owner Phone filter */}
+          <button
+            onClick={() => setHasOwnerPhoneFilter((v) => !v)}
+            data-testid="btn-filter-owner-phone"
+            className={cn(
+              "flex items-center gap-1.5 h-8 px-3 rounded border text-xs font-medium transition-all",
+              hasOwnerPhoneFilter
+                ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                : "bg-transparent text-muted-foreground border-border hover:border-violet-500/40 hover:text-violet-400"
+            )}
+          >
+            <UserCheck className="h-3.5 w-3.5" />
+            Has Owner Phone
+            {ownerCount > 0 && (
+              <span className={cn(
+                "ml-1 px-1 rounded text-xs font-semibold",
+                hasOwnerPhoneFilter ? "bg-violet-500/30 text-violet-200" : "bg-muted text-muted-foreground"
+              )}>
+                {ownerCount}
+              </span>
+            )}
+          </button>
+
           <div className="flex items-center gap-2 text-xs text-muted-foreground ml-auto">
             <MapPin className="h-3 w-3" />
-            <span>Click any row to open in Google Maps</span>
+            <span>Click row to open Google Maps</span>
             <span className="text-border">·</span>
             <span>{filtered.length} lead{filtered.length !== 1 ? "s" : ""}</span>
           </div>
@@ -411,10 +592,14 @@ export default function Leads() {
             <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
               <Users className="h-8 w-8 mb-2 opacity-30" />
               <p className="text-sm">No leads found</p>
-              <p className="text-xs mt-1">Run a search to find and save leads</p>
+              <p className="text-xs mt-1">
+                {hasOwnerPhoneFilter
+                  ? "No leads with owner phone yet — use \"Find Owner\" on any row"
+                  : "Run a search to find and save leads"}
+              </p>
             </div>
           ) : (
-            <table className="w-full text-sm border-collapse min-w-[1100px]">
+            <table className="w-full text-sm border-collapse min-w-[1300px]">
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground sticky top-0 bg-background z-10">
                   <th className="w-8 px-3 py-2.5 text-left">
@@ -440,7 +625,13 @@ export default function Leads() {
                     Rating <SortIcon k="rating" />
                   </th>
                   <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Location</th>
-                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Web / Phone</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Web / Biz Phone</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider text-violet-400/80">
+                    <span className="flex items-center gap-1">
+                      <UserCheck className="h-3 w-3" />
+                      Owner Info
+                    </span>
+                  </th>
                   <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Notes</th>
                   <th className="w-10 px-3 py-2.5" />
                 </tr>
@@ -519,7 +710,7 @@ export default function Leads() {
                       {lead.city || lead.address || "—"}
                     </td>
 
-                    {/* Web / Phone */}
+                    {/* Web / Biz Phone */}
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
                         {lead.hasWebsite ? (
@@ -558,6 +749,15 @@ export default function Leads() {
                           <Phone className="h-3.5 w-3.5 text-red-400/50" title="No phone" />
                         )}
                       </div>
+                    </td>
+
+                    {/* Owner Info */}
+                    <td className="px-3 py-2.5">
+                      <FindOwnerCell
+                        lead={lead}
+                        onUpdate={handleUpdate}
+                        onInvalidate={invalidate}
+                      />
                     </td>
 
                     {/* Notes */}

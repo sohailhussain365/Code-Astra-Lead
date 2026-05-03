@@ -55,6 +55,8 @@ export const GetLeadsResponseItem = zod.object({
   callLaterAt: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
   aiQualification: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  ownerPhone: zod.string().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -140,6 +142,19 @@ export const UpdateLeadBody = zod.object({
   callLaterAt: zod.string().nullish(),
   notes: zod.string().nullish(),
   aiQualification: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  ownerPhone: zod.string().nullish(),
+});
+
+export const FindOwnerResponse = zod.object({
+  ownerName: zod.string().nullish(),
+  ownerPhone: zod.string().nullish(),
+  confidence: zod.enum(["found", "partial", "not_found", "no_website", "error"]),
+  source: zod.string().nullish(),
+  researchLinks: zod.object({
+    google: zod.string(),
+    linkedin: zod.string().nullish(),
+  }),
 });
 
 export const UpdateLeadResponse = zod.object({
@@ -172,6 +187,8 @@ export const UpdateLeadResponse = zod.object({
   callLaterAt: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
   aiQualification: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  ownerPhone: zod.string().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });

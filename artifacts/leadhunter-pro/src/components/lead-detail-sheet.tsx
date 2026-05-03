@@ -8,12 +8,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { LeadScoreBadge } from "@/components/lead-score-badge";
 import {
   useUpdateLead,
   useQualifyLead,
   useGenerateOutreachTemplate,
+  useFindOwner,
   getGetLeadsQueryKey,
   getGetAnalyticsSummaryQueryKey,
 } from "@workspace/api-client-react";
@@ -32,6 +34,9 @@ import {
   Check,
   X,
   ChevronRight,
+  User,
+  UserCheck,
+  Search as SearchIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +61,8 @@ interface Lead {
   callLaterAt?: string | null;
   notes?: string | null;
   aiQualification?: string | null;
+  ownerName?: string | null;
+  ownerPhone?: string | null;
 }
 
 interface LeadDetailSheetProps {
@@ -87,12 +94,16 @@ export function LeadDetailSheet({ lead, open, onClose, onLeadUpdated }: LeadDeta
   const { toast } = useToast();
   const qc = useQueryClient();
   const [notes, setNotes] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerPhone, setOwnerPhone] = useState("");
   const [outreachContent, setOutreachContent] = useState<{ type: string; subject?: string | null; body: string } | null>(null);
   const [activeTemplate, setActiveTemplate] = useState<"email" | "call" | null>(null);
+  const [researchLinks, setResearchLinks] = useState<{ google: string; linkedin?: string | null } | null>(null);
 
   const updateLead = useUpdateLead();
   const qualifyLead = useQualifyLead();
   const generateTemplate = useGenerateOutreachTemplate();
+  const findOwner = useFindOwner();
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
@@ -109,6 +120,47 @@ export function LeadDetailSheet({ lead, open, onClose, onLeadUpdated }: LeadDeta
           toast({ title: "Notes saved" });
           invalidate();
         },
+      }
+    );
+  };
+
+  const handleSaveOwner = () => {
+    if (!lead) return;
+    updateLead.mutate(
+      { id: lead.id, data: { ownerName: ownerName || null, ownerPhone: ownerPhone || null } },
+      {
+        onSuccess: () => {
+          toast({ title: "Owner info saved" });
+          invalidate();
+        },
+      }
+    );
+  };
+
+  const handleFindOwner = () => {
+    if (!lead) return;
+    setResearchLinks(null);
+    findOwner.mutate(
+      { id: lead.id },
+      {
+        onSuccess: (data) => {
+          setResearchLinks(data.researchLinks);
+          if (data.ownerName) setOwnerName(data.ownerName);
+          if (data.ownerPhone) setOwnerPhone(data.ownerPhone);
+
+          if (data.confidence === "found") {
+            toast({ title: "Owner found!", description: [data.ownerName, data.ownerPhone].filter(Boolean).join(" · ") });
+            invalidate();
+          } else if (data.confidence === "partial") {
+            toast({ title: "Partial info found", description: "Review and fill in the missing field." });
+            invalidate();
+          } else if (data.confidence === "no_website") {
+            toast({ title: "No website on file", description: "Use the research links below to find the owner." });
+          } else {
+            toast({ title: "Not found automatically", description: "Use the research links below." });
+          }
+        },
+        onError: () => toast({ title: "Search failed", variant: "destructive" }),
       }
     );
   };
@@ -160,6 +212,7 @@ export function LeadDetailSheet({ lead, open, onClose, onLeadUpdated }: LeadDeta
 
   const tags = (lead.opportunityTags || "").split(", ").filter(Boolean);
   const stages = ["new", "contacted", "interested", "qualified", "won", "lost"];
+  const hasOwner = lead.ownerName || lead.ownerPhone;
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -191,7 +244,7 @@ export function LeadDetailSheet({ lead, open, onClose, onLeadUpdated }: LeadDeta
         </SheetHeader>
 
         <div className="px-5 py-4 space-y-5">
-          {/* Contact info */}
+          {/* Business Contact info */}
           <div className="space-y-2">
             {lead.address && (
               <div className="flex items-start gap-2 text-sm">
@@ -205,6 +258,7 @@ export function LeadDetailSheet({ lead, open, onClose, onLeadUpdated }: LeadDeta
                 <a href={`tel:${lead.phone}`} className="text-primary hover:underline">
                   {lead.phone}
                 </a>
+                <span className="text-xs text-muted-foreground/50">(business)</span>
               </div>
             )}
             {lead.website && (
@@ -246,6 +300,117 @@ export function LeadDetailSheet({ lead, open, onClose, onLeadUpdated }: LeadDeta
               )}
             </div>
           )}
+
+          <Separator />
+
+          {/* ── Owner Info ── */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-violet-400 flex items-center gap-1.5">
+                <UserCheck className="h-3.5 w-3.5" />
+                Owner Info
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 gap-1 border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                onClick={handleFindOwner}
+                disabled={findOwner.isPending}
+                data-testid="btn-find-owner"
+              >
+                {findOwner.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <SearchIcon className="h-3 w-3" />
+                )}
+                {findOwner.isPending ? "Scanning website…" : hasOwner ? "Re-scan" : "Auto-Find"}
+              </Button>
+            </div>
+
+            {/* Existing owner info display */}
+            {hasOwner && (
+              <div className="bg-violet-500/10 border border-violet-500/20 rounded p-2.5 mb-3 space-y-1">
+                {lead.ownerName && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                    <span className="font-medium text-foreground">{lead.ownerName}</span>
+                    <span className="text-xs text-violet-400/60 ml-auto">owner</span>
+                  </div>
+                )}
+                {lead.ownerPhone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                    <a href={`tel:${lead.ownerPhone}`} className="text-violet-300 hover:underline font-medium">
+                      {lead.ownerPhone}
+                    </a>
+                    <span className="text-xs text-violet-400/60 ml-auto">owner</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Editable fields */}
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Owner Name</label>
+                <Input
+                  placeholder="e.g. John Smith"
+                  defaultValue={lead.ownerName ?? ""}
+                  onChange={(e) => setOwnerName(e.target.value)}
+                  className="h-8 text-xs bg-muted/30 border-border"
+                  data-testid="input-owner-name"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Owner Phone</label>
+                <Input
+                  placeholder="e.g. (555) 123-4567"
+                  defaultValue={lead.ownerPhone ?? ""}
+                  onChange={(e) => setOwnerPhone(e.target.value)}
+                  className="h-8 text-xs bg-muted/30 border-border"
+                  data-testid="input-owner-phone"
+                />
+              </div>
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
+                onClick={handleSaveOwner}
+                disabled={updateLead.isPending}
+                data-testid="btn-save-owner"
+              >
+                Save Owner Info
+              </Button>
+            </div>
+
+            {/* Research links after scan */}
+            {researchLinks && (
+              <div className="mt-3 p-2.5 bg-muted/30 rounded border border-border space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Research Links</p>
+                <a
+                  href={researchLinks.google}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                >
+                  <SearchIcon className="h-3 w-3" />
+                  Google: search for owner
+                  <ExternalLink className="h-3 w-3 ml-auto" />
+                </a>
+                {researchLinks.linkedin && (
+                  <a
+                    href={researchLinks.linkedin}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  >
+                    <User className="h-3 w-3" />
+                    LinkedIn search
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
 
           <Separator />
 

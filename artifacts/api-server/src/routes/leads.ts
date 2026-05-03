@@ -129,6 +129,8 @@ router.patch("/leads/:id", async (req, res): Promise<void> => {
   if (body.data.callLaterAt !== undefined) updateData.callLaterAt = body.data.callLaterAt;
   if (body.data.notes !== undefined) updateData.notes = body.data.notes;
   if (body.data.aiQualification !== undefined) updateData.aiQualification = body.data.aiQualification;
+  if (body.data.ownerName !== undefined) updateData.ownerName = body.data.ownerName;
+  if (body.data.ownerPhone !== undefined) updateData.ownerPhone = body.data.ownerPhone;
 
   const [lead] = await db
     .update(leadsTable)
@@ -162,6 +164,130 @@ router.delete("/leads/:id", async (req, res): Promise<void> => {
   }
 
   res.sendStatus(204);
+});
+
+// ─── OWNER FINDER ────────────────────────────────────────────────────────────
+const PHONE_RE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/g;
+const OWNER_RE_LIST = [
+  /(?:owner|founder|proprietor|president|ceo|principal|managing\s+partner|director)[:\s,\-–]+([A-Z][a-zÀ-ž]+(?:\s[A-Z][a-zÀ-ž]+)+)/gi,
+  /([A-Z][a-zÀ-ž]+(?:\s[A-Z][a-zÀ-ž]+)+)[,\s]*[-–]?\s*(?:owner|founder|proprietor|president|ceo|principal)/gi,
+];
+
+function stripHtml(html: string): string {
+  return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+             .replace(/<[^>]+>/g, " ")
+             .replace(/\s+/g, " ");
+}
+
+function extractPhones(text: string): string[] {
+  const raw = text.match(PHONE_RE) || [];
+  return [...new Set(raw.map((p) => p.trim()))];
+}
+
+function extractOwnerName(text: string): string | null {
+  for (const re of OWNER_RE_LIST) {
+    re.lastIndex = 0;
+    const m = re.exec(text);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+async function fetchPage(url: string): Promise<string> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 7000);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadHunterBot/1.0)" },
+    });
+    clearTimeout(t);
+    if (!res.ok) return "";
+    return await res.text();
+  } catch {
+    clearTimeout(t);
+    return "";
+  }
+}
+
+async function scrapeOwner(website: string, businessPhone: string | null): Promise<{
+  ownerName: string | null;
+  ownerPhone: string | null;
+  source: string | null;
+}> {
+  let base: URL;
+  try { base = new URL(website); } catch { return { ownerName: null, ownerPhone: null, source: null }; }
+
+  const paths = ["", "/contact", "/about", "/about-us", "/contact-us", "/team", "/our-team", "/staff"];
+  const tried = new Set<string>();
+
+  let ownerName: string | null = null;
+  let ownerPhone: string | null = null;
+  let source: string | null = null;
+
+  for (const p of paths) {
+    const url = `${base.origin}${p}`;
+    if (tried.has(url)) continue;
+    tried.add(url);
+
+    const html = await fetchPage(url);
+    if (!html) continue;
+
+    const text = stripHtml(html);
+
+    if (!ownerName) {
+      ownerName = extractOwnerName(text);
+      if (ownerName) source = url;
+    }
+
+    if (!ownerPhone) {
+      const phones = extractPhones(text).filter((p) => p !== businessPhone);
+      if (phones.length > 0) ownerPhone = phones[0];
+    }
+
+    if (ownerName && ownerPhone) break;
+  }
+
+  return { ownerName, ownerPhone, source };
+}
+
+router.post("/leads/:id/find-owner", async (req, res): Promise<void> => {
+  const params = GetLeadParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, params.data.id));
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+
+  const googleLink = `https://www.google.com/search?q=${encodeURIComponent(`"${lead.businessName}" "${lead.city || ""}" owner contact`)}`;
+  const researchLinks = { google: googleLink, linkedin: lead.linkedinSearch ?? null };
+
+  if (!lead.website) {
+    res.json({ ownerName: null, ownerPhone: null, confidence: "no_website", source: null, researchLinks });
+    return;
+  }
+
+  try {
+    const { ownerName, ownerPhone, source } = await scrapeOwner(lead.website, lead.phone);
+
+    const confidence =
+      ownerName && ownerPhone ? "found" :
+      ownerName || ownerPhone ? "partial" : "not_found";
+
+    if (ownerName || ownerPhone) {
+      await db.update(leadsTable).set({
+        ...(ownerName ? { ownerName } : {}),
+        ...(ownerPhone ? { ownerPhone } : {}),
+      }).where(eq(leadsTable.id, lead.id));
+    }
+
+    res.json({ ownerName, ownerPhone, confidence, source, researchLinks });
+  } catch (err) {
+    res.json({ ownerName: null, ownerPhone: null, confidence: "error", source: null, researchLinks });
+  }
 });
 
 router.post("/leads/:id/qualify", async (req, res): Promise<void> => {

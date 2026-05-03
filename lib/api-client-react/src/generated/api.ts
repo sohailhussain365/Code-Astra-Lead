@@ -548,6 +548,89 @@ export const useDeleteLead = <
 };
 
 /**
+ * @summary Find owner name and phone by scraping the business website
+ */
+export type FindOwnerResult = {
+  ownerName: string | null;
+  ownerPhone: string | null;
+  confidence: "found" | "partial" | "not_found" | "no_website" | "error";
+  source: string | null;
+  researchLinks: { google: string; linkedin?: string | null };
+};
+
+export const getFindOwnerUrl = (id: number) => `/api/leads/${id}/find-owner`;
+
+export const findOwner = async (
+  id: number,
+  options?: RequestInit,
+): Promise<FindOwnerResult> => {
+  return customFetch<FindOwnerResult>(getFindOwnerUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getFindOwnerMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof findOwner>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof findOwner>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["findOwner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof findOwner>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+    return findOwner(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type FindOwnerMutationResult = NonNullable<Awaited<ReturnType<typeof findOwner>>>;
+export type FindOwnerMutationError = ErrorType<void>;
+
+export const useFindOwner = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof findOwner>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof findOwner>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getFindOwnerMutationOptions(options));
+};
+
+/**
  * @summary Generate AI qualification brief for a lead
  */
 export const getQualifyLeadUrl = (id: number) => {

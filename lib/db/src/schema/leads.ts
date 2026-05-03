@@ -50,6 +50,8 @@ export const leadsTable = pgTable("leads", {
   callLaterAt: timestamp("call_later_at", { withTimezone: true }),
   notes: text("notes"),
   aiQualification: text("ai_qualification"),
+  ownerName: text("owner_name"),
+  ownerPhone: text("owner_phone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
