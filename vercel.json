@@ -1,6 +1,6 @@
 {
   "installCommand": "npm install -g pnpm && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter @workspace/mockup-sandbox run build",
-  "outputDirectory": "artifacts/mockup-sandbox/dist",
+  "buildCommand": "pnpm --filter @workspace/leadhunter-pro run build",
+  "outputDirectory": "artifacts/leadhunter-pro/dist/public",
   "framework": null
 }
