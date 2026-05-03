@@ -182,7 +182,7 @@ router.post("/leads/:id/qualify", async (req, res): Promise<void> => {
   }
 
   const signals: string[] = [];
-  let score = lead.leadScore;
+  const score = lead.leadScore;
 
   if (!lead.hasWebsite) signals.push("No website — high opportunity for digital services");
   if (lead.hasWebsite) signals.push("Has a website — assess quality and modernness");
@@ -270,7 +270,7 @@ router.post("/leads/:id/outreach-template", async (req, res): Promise<void> => {
       : `Hi there,\n\nI was researching top businesses in ${city} and came across ${name} — you've clearly built something great in the community.\n\nI work with local businesses at your level to help them scale: more leads, more visibility, and smarter digital marketing that actually converts.\n\nI'd love to share a few specific ideas I have for ${name}. Would you have 15 minutes for a quick call this week?\n\nBest,\n[Your Name]\n[Your Business]`;
   } else {
     templateBody = noWebsite
-      ? `Opening: "Hi, is this ${name}? Great — my name is [Your Name] and I help local businesses in ${city} get found online. I noticed ${name} doesn't have a website yet — is that something you've considered?"\n\nIf yes: "What's held you back so far? Cost? Time? — I get it. Most of my clients said the same thing. That's why I offer a free mockup so you can see exactly what it would look like before spending anything."\n\nIf no: "I completely understand. Can I ask — how do most of your new customers find you right now? [Listen]. That's great — imagine combining that with showing up on Google when someone searches for [category] in ${city}."\n\nClose: "I'd love to show you what this could look like for your business. Could we set up a 15-minute call this week?"` 
+      ? `Opening: "Hi, is this ${name}? Great — my name is [Your Name] and I help local businesses in ${city} get found online. I noticed ${name} doesn't have a website yet — is that something you've considered?"\n\nIf yes: "What's held you back so far? Cost? Time? — I get it. Most of my clients said the same thing. That's why I offer a free mockup so you can see exactly what it would look like before spending anything."\n\nIf no: "I completely understand. Can I ask — how do most of your new customers find you right now? [Listen]. That's great — imagine combining that with showing up on Google when someone searches for [category] in ${city}."\n\nClose: "I'd love to show you what this could look like for your business. Could we set up a 15-minute call this week?"`
       : `Opening: "Hi, is this ${name}? Great — my name is [Your Name]. I was looking at local businesses in ${city} and came across ${name} — you've got a solid reputation there. I specialize in helping businesses like yours grow their customer base digitally."\n\nValue pitch: "I work with [category] businesses to generate more leads through SEO, Google Ads, and review management. On average my clients see a 30-40% increase in inbound inquiries within 90 days."\n\nQualifying question: "Are you currently doing any digital marketing, or is that something you're looking to explore?"\n\nClose: "I'd love to put together a free growth plan for ${name}. Could we set aside 15 minutes this week to go over it?"`;
   }
 

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { lte, eq, count, avg, sql } from "drizzle-orm";
+import { eq, count, avg, sql } from "drizzle-orm";
 import { db, leadsTable, searchesTable } from "@workspace/db";
 import {
   GetAnalyticsSummaryResponse,
